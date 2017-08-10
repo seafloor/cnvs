@@ -19,25 +19,98 @@
 # scripts (try to) follow Google's R style guide: https://google.github.io/styleguide/Rguide.xml
 
 # setup -------------------------------------------------------------------
-# import files
+
+# set default values
+plot_region <- "file"
+all_chr <- vector()
+all_start <- vector(mode = "integer")
+all_end <- vector(mode = "integer")
+# out <- ""
+
+# print how to use
 args <- commandArgs(TRUE)
-cnv.list.path <- args[1]
-batch.dir <- args[2]
-#cnv.list.path <- "~/Dropbox/PhD/Year 1/Rotation 3/code/cnvlist.txt"
-#batch.dir <- "~/Desktop/testing cnv plot/BATCHES"
-
-
-cnv.list <- read.table(cnv.list.path,
-                     header = TRUE,
-                     stringsAsFactors = FALSE,
-                     colClasses = c("character", "character", "integer", "integer"))
-
-# checking start and end positions are in the right order
-apply(cnv.list, 1, function(x) {
-  if(x[3] >= x[4]) {
-    stop("The start of a CNV must come before the end!")
+if(length(args) < 2 | length(args) > 6) {
+  write(paste("##\n##\n## plot_CNVs creates a pdf of LRR and BAF plots for CNV regions you supply",
+    "##\n## a call to plot_CNVs looks like '.plot_CNVs cnvlist.txt directory_to_check', where:",
+    "##  - cnvlist.txt has the 4 headers id, chromosome, start and end, and the id doesn't include the split3. section",
+    "##  - directory_to_check is any directory that contains split files (they can be in subfolders). Don't include a slash at the end.",
+    "##  - e.g. './plot_CNVs ./cnvstocheck.txt /c8000xd3/uk-biobank-kirov/BATCHES'\n##",
+    "## you can override cnv locations for IDs by calling './plot_CNVs cnvlist.txt dir_to_check override chr start end'",
+    "##  - e.g. './plot_CNVs ./testlist_override.txt /c8000xd3/uk-biobank-kirov/BATCHES override 22 44000000 46000000",
+    "##  - this will ignore any cnv locations in the testlist_override.txt file",
+    "##  - if you're overriding values, your testlist_override.txt file can just have the one header, 'id', with just a single column of IDs",
+    "##\n## the CNV_visualisations.pdf output is saved in the directory you supply\n##\n##\n", sep = "\n"), stdout())
+  stop("Not enough arguments. Please follow instructions above")
+} else if(length(args) == 2) {
+  # set command-line args
+  cnv.list.path <- args[1]
+  if(!file_test("-f", cnv.list.path)) {
+    stop("cnv.list.path is not a file")
   }
-})
+  batch.dir <- args[2]
+  if(!file_test("-d", batch.dir)) {
+    stop("batch.dir is not a directory")
+  }
+} else if(length(args) > 2 & length(args) < 6) {
+  write(paste("##\n##\n## plot_CNVs creates a pdf of LRR and BAF plots for CNV regions you supply",
+    "##\n## a call to plot_CNVs looks like '.plot_CNVs cnvlist.txt directory_to_check', where:",
+    "##  - cnvlist.txt has the 4 headers id, chromosome, start and end, and the id doesn't include the split3. section",
+    "##  - directory_to_check is any directory that contains split files (they can be in subfolders). Don't include a slash at the end.",
+    "##  - e.g. './plot_CNVs ./cnvstocheck.txt /c8000xd3/uk-biobank-kirov/BATCHES'\n##",
+    "## you can override cnv locations for IDs by calling './plot_CNVs cnvlist.txt dir_to_check override chr start end'",
+    "##  - e.g. './plot_CNVs ./testlist_override.txt /c8000xd3/uk-biobank-kirov/BATCHES override 22 44000000 46000000",
+    "##  - this will ignore any cnv locations in the testlist_override.txt file",
+    "##  - if you're overriding values, your testlist_override.txt file can just have the one header, 'id', with just a single column of IDs",
+    "##\n## the CNV_visualisations.pdf output is saved in the directory you supply\n##\n##\n", sep = "\n"), stdout())
+  stop("Incorrect number of arguments. Please follow instructions above")
+} else if(length(args) == 6) {
+  # setup for overriding cnv locations or plotting both
+  cnv.list.path <- args[1]
+  if(!file_test("-f", cnv.list.path)) {
+    stop("cnv.list.path is not a file")
+  }
+  batch.dir <- args[2]
+  if(!file_test("-d", batch.dir)) {
+    stop("batch.dir is not a directory")
+  }
+  plot_region <- args[3]
+  if(!plot_region %in% c("override", "both")) {
+    stop("plot_region argument not recognised. Please use either 'override' or 'both' without quotation marks")
+  }
+  all_chr <- args[4]
+  if(!all_chr %in% c(1:22, "X", "Y")) {
+    stop("all_chr is not a recognised chromosome")
+  }
+  all_start <- as.integer(args[5])
+  all_end <- as.integer(args[6])
+
+  if(plot_region == "override") {
+    write(paste("Overriding CNV locations in csv file with chromosome ", all_chr, ", starting location ", all_start, ", ending location ", all_end, sep = ""), stdout())
+  } else if(plot_region == "both") {
+    write(paste("Plotting both CNV locations in csv file and chromosome ", all_chr, ", starting location ", all_start, ", ending location ", all_end, sep = ""), stdout())
+  }
+}
+     
+  
+
+# import files
+if(plot_region %in% c("file", "both")) {
+  cnv.list <- read.table(cnv.list.path,
+                       header = TRUE,
+                       stringsAsFactors = FALSE,
+                       colClasses = c("character", "character", "integer", "integer"))
+  # checking start and end positions are in the right order
+  apply(cnv.list, 1, function(x) {
+    if(x[3] >= x[4]) {
+      stop("The start of a CNV must come before the end!")
+    }
+  })
+} else if(plot_region == "override") {
+  cnv.list <- read.table(cnv.list.path,
+			 header = TRUE,
+			 stringsAsFactors = FALSE,
+			 colClasses = c("character"))
+}
 
 # create new variables
 people.to.look.for <- unique(cnv.list$id)
@@ -91,7 +164,7 @@ PlotBaf <- function(id, start.position, end.position, chromosome, range) {
 
 # define functions for individuals ----------------------------------------
 
-FindCNV <- function(file.path, cnv.list, people.to.look.for, id.present) {
+FindCNV <- function(file.path, cnv.list, people.to.look.for, id.present, all_chr, all_start, all_end, plot_region) {
   # FindCNV:
   #   - read in the individual's split file
   #   - iterate through regions to check, calling the plot functions for each
@@ -118,24 +191,53 @@ FindCNV <- function(file.path, cnv.list, people.to.look.for, id.present) {
   
   id <- people.to.look.for[id.present]
   short.list <- cnv.list[cnv.list$id == id, ]
+  if(!is.data.frame(short.list)) {
+    looplen <- 1:length(short.list)
+  } else {
+    looplen <- 1:nrow(short.list)
+  }
+
   #print(short.list)
-  for(line in 1:nrow(short.list)) {
-    chromosome <- short.list[line, "chromosome"]
-    
-    # get closest positions if SNP locations are not present in the file
-    if(short.list[line, "start"] %in% chromosome.file[, "Position"]) {
-      start.position <- short.list[line, "start"]
-    } else {
-      write("start snp not present: choosing closest match", stdout())
-      start.position <- chromosome.file[, "Position"][which.min(abs(chromosome.file[, "Position"] - short.list[line, "start"]))]
+  for(line in looplen) {
+    if(plot_region == "override") {
+      # if user wants to override the csv file locations for CNVs
+      chromosome <- all_chr
+      # add start and end positions
+      # get closest positions if SNP locations are not present in the file
+      if(all_start %in% chromosome.file[, "Position"]) {
+        start.position <- all_start
+      } else {
+        write("start snp not present: choosing closest match", stdout())
+        start.position <- chromosome.file[, "Position"][which.min(abs(chromosome.file[, "Position"] - all_start))]
+      }
       
-    }
-    
-    if(short.list[line, "end"] %in% chromosome.file[, "Position"]) {
-      end.position <- short.list[line, "end"]
-    } else {
-      write("end snp not present: choosing closest match", stdout())
-      end.position <- chromosome.file[, "Position"][which.min(abs(chromosome.file[, "Position"] - short.list[line, "end"]))]
+      if(all_end %in% chromosome.file[, "Position"]) {
+        end.position <- all_end
+      } else {
+        write("end snp not present: choosing closest match", stdout())
+        end.position <- chromosome.file[, "Position"][which.min(abs(chromosome.file[, "Position"] - all_end))]
+      }
+    } else if(plot_region == "both") {
+      # if user wants to plot csv file regions but show expanded region too
+      # need to add a check to make sure command line regions are outside csv regions
+    } else if(plot_region == "file") {
+      # if user just supplies csv file locations
+      chromosome <- short.list[line, "chromosome"]
+      
+      # get closest positions if SNP locations are not present in the file
+      if(short.list[line, "start"] %in% chromosome.file[, "Position"]) {
+        start.position <- short.list[line, "start"]
+      } else {
+        write("start snp not present: choosing closest match", stdout())
+        start.position <- chromosome.file[, "Position"][which.min(abs(chromosome.file[, "Position"] - short.list[line, "start"]))]
+      }
+      
+      if(short.list[line, "end"] %in% chromosome.file[, "Position"]) {
+        end.position <- short.list[line, "end"]
+      } else {
+        write("end snp not present: choosing closest match", stdout())
+        end.position <- chromosome.file[, "Position"][which.min(abs(chromosome.file[, "Position"] - short.list[line, "end"]))]
+      }
     }
     
     # filter for our cnv
@@ -159,7 +261,7 @@ FindCNV <- function(file.path, cnv.list, people.to.look.for, id.present) {
 #batch.num <- 1
 #batch.parent <- "~/Desktop/testing cnv plot/BATCHES"
 #batch.location <- paste("~/Desktop/testing cnv plot/BATCHES/Batch", batch.num, "/Batch", batch.num, "_split", sep = "")
-batch.pattern <- "split\\..+"
+batch.pattern <- "^split[a-zA-Z0-9]+\\..+"
 
 pdf.name = paste(batch.dir, "CNV_visualisations.pdf", sep = "/") # choose pdf name
 pdf(file = pdf.name, width = 8.27, height = 11.69) 
@@ -190,11 +292,11 @@ lapply(files, function(file.path) {
     # if the file name contains one of the IDs we want
     # call FindCNV to read in the file and plot all their CNVs we want
     write(paste("checking file:", file.path, sep = " "), stdout())
-    FindCNV(file.path, cnv.list, people.to.look.for, id.present)
+    FindCNV(file.path, cnv.list, people.to.look.for, id.present, all_chr, all_start, all_end, plot_region)
   } else {
     #write(paste("ignoring file:", file.path, sep = " "), stdout())
   }
 }))
 
-mtext(paste("CNV traces generated using", batch.dir, "\non", format(Sys.time(), "%d-%m-%Y"), "using R version", getRversion(), sep = " "), outer = TRUE, side = 1)
+mtext(paste("CNV traces generated using", batch.dir, "\non", format(Sys.time(), "%d-%m-%Y"), "using R version", getRversion(), sep = " "), outer = TRUE, side = 1, cex = 0.6)
 dev.off() 
