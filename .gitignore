@@ -2,6 +2,10 @@
 .Rhistory
 .Rapp.history
 
+# mac stuff
+.DS_Store
+code/.DS_Store
+
 # Session Data files
 .RData
 
@@ -31,3 +35,7 @@ vignettes/*.pdf
 # Temporary files created by R markdown
 *.utf8.md
 *.knit.md
+
+# Ignore data files
+data/*
+code/get_biobank_diagnoses_for_kim.R
