@@ -103,30 +103,28 @@ if(length(args) < 2 | length(args) > 6) {
 
 # import files
 if(plot_region %in% c("file", "both")) {
-  cnv.list <- read.table(cnv.list.path,
+  suppressWarnings(cnv.list <- read.table(cnv.list.path,
                        header = TRUE,
                        stringsAsFactors = FALSE,
-                       colClasses = c("character", "character", "integer", "integer"))
+                       colClasses = c("character", "character", "integer", "integer")))
   # checking start and end positions are in the right order
-  apply(cnv.list, 1, function(x) {
-    if(x[3] >= x[4]) {
+  if(sum(cnv.list[3] >= cnv.list[4]) > 0) {
       stop("The start of a CNV must come before the end!")
-    }
-  })
+  }
 } else if(plot_region == "override") {
-  cnv.list <- read.table(cnv.list.path,
+  suppressWarnings(cnv.list <- read.table(cnv.list.path,
 			 header = TRUE,
 			 stringsAsFactors = FALSE,
-			 colClasses = c("character"))
+			 colClasses = c("character")))
 }
 
 # if plot_region = both, check that the outer regions are more extreme than the inner regions in the file
 if(plot_region == "both") {
-  if(sum(sapply(cnv.list$start, function(x) x < all_start)) > 0) {
-    stop("start region passed to command line must be lower than all start regions in the cnvlist file")
+  if(sum(cnv.list$start < all_start) > 0) {
+    stop("start region passed to command line must be less than or equal to all start regions in the cnvlist file")
   }
-  if(sum(sapply(cnv.list$end, function(x) x > all_end)) > 0) {
-    stop("end region passed to command line must be lower than all start regions in the cnvlist file")
+  if(sum(cnv.list$end > all_end) > 0) {
+    stop("end region passed to command line must be greater than or equal to all end regions in the cnvlist file")
   }
 }
 
@@ -322,6 +320,7 @@ tryCatch(files <- list.files(path = batch.dir, pattern = batch.pattern, full.nam
 	 c$message <- paste("failed to list files")
 	 stop(c)
 })
+write(paste(files))
 if(length(files) > 0) {
   write(paste(length(files), "files listed for checking", sep = " "), stdout())
 } else {
